@@ -19,3 +19,4 @@ services:
       PRINTER_HOST: "192.168.1.73"        # the TM-m30II's reserved IP
       PRINTER_PORT: "9100"
       PRINT_WIDTH:  "576"                 # 80mm @ 203dpi = 576 dots (leave as-is for m30II)
+      # TOP_MARGIN_DOTS: "40"   # blank top feed (~5mm) so the title is not clipped; raise if it still cuts

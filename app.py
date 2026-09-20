@@ -20,6 +20,8 @@ PRINTER_PORT = int(os.environ.get("PRINTER_PORT", "9100"))
 PRINT_WIDTH = int(os.environ.get("PRINT_WIDTH", "576"))   # TM-m30II @ 80mm
 COLS = PRINT_WIDTH // 12                                    # Font A columns (12-dot glyph)
 DOTS_PER_MM = 8                                            # 203 dpi ≈ 8 dots/mm
+# Blank leading feed so the cutter's non-printable top zone doesn't clip line 1.
+TOP_MARGIN_DOTS = int(os.environ.get("TOP_MARGIN_DOTS", "40"))  # ≈ 5 mm
 FONT_PATH = os.path.join(os.path.dirname(__file__), "assets", "PatrickHand-Regular.ttf")
 
 app = Flask(__name__)
@@ -52,6 +54,16 @@ def connect():
     except Exception:  # noqa: BLE001 — best-effort; printing works regardless
         pass
     return p
+
+
+def feed_top(p):
+    """Feed a small blank top margin so line 1 clears the cutter's dead zone."""
+    n = max(0, min(255, TOP_MARGIN_DOTS))
+    if n:
+        try:
+            p._raw(b"\x1b\x4a" + bytes([n]))   # ESC J n — print buffer + feed n dots
+        except Exception:  # noqa: BLE001 — fall back to a line feed
+            p.text("\n")
 
 
 def flatten(img):
@@ -176,6 +188,7 @@ def print_image():
     try:
         bw = build_image(request.files["image"], request.form)
         p = connect()
+        feed_top(p)
         p.image(bw, impl="bitImageRaster")
         p.cut(mode="PART")
         p.close()
@@ -193,6 +206,7 @@ def print_text():
     title = (data.get("title") or "").strip()
     try:
         p = connect()
+        feed_top(p)
         if title:
             p.set(align="center", bold=True, width=2, height=2)
             for ln in textwrap.wrap(title, width=max(1, COLS // 2)) or [""]:
