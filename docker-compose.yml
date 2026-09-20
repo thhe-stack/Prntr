@@ -1,0 +1,13 @@
+# Prntr — LAN thermal-printer GUI for the Epson TM-m30II
+# Portainer > Stacks > Add stack > paste this. Set the image to YOUR ghcr repo.
+services:
+  prntr:
+    image: ghcr.io/OWNER/REPO:latest      # <-- change OWNER/REPO after first GH Actions build
+    container_name: prntr
+    restart: unless-stopped
+    ports:
+      - "8080:8080"                        # http://<thinksmart-ip>:8080
+    environment:
+      PRINTER_HOST: "192.168.1.73"         # the TM-m30II's reserved IP
+      PRINTER_PORT: "9100"
+      PRINT_WIDTH:  "576"                  # 80mm @ 203dpi = 576 dots (do not change for m30II)

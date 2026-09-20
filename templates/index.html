@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prntr · TM-m30II</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --card2:#1e222b; --line:#2a2f3a;
+    --ink:#e8eaed; --mut:#9aa3b2; --accent:#ff6a3d;
+    --ok:#39d98a; --bad:#ff5d5d; --paper:#fbfbf7;
+    --radius:16px; --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  @media (prefers-color-scheme:light){
+    :root{ --bg:#eef0f4; --card:#fff; --card2:#f4f6fa; --line:#e2e6ee;
+           --ink:#1c2430; --mut:#5d6675; --shadow:0 10px 30px rgba(20,30,50,.10); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink); min-height:100vh;
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:16px; display:flex; justify-content:center;
+  }
+  .app{width:100%; max-width:920px}
+  header{display:flex; align-items:center; gap:12px; margin:6px 2px 18px}
+  .logo{font-weight:800; font-size:22px; letter-spacing:.5px}
+  .logo span{color:var(--accent)}
+  .status{margin-left:auto; display:flex; align-items:center; gap:8px; color:var(--mut); font-size:13px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--mut)}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)}
+  .grid{display:grid; grid-template-columns:1fr 340px; gap:16px}
+  @media (max-width:760px){ .grid{grid-template-columns:1fr} }
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
+  .pad{padding:18px}
+  .tabs{display:flex; gap:6px; padding:6px; background:var(--card2); border-radius:12px; margin-bottom:16px}
+  .tab{flex:1; text-align:center; padding:10px; border-radius:9px; cursor:pointer; color:var(--mut); font-weight:600}
+  .tab.active{background:var(--card); color:var(--ink); box-shadow:var(--shadow)}
+  label{display:block; font-size:13px; color:var(--mut); margin:14px 0 6px; font-weight:600}
+  textarea,input[type=text],select{
+    width:100%; background:var(--card2); color:var(--ink); border:1px solid var(--line);
+    border-radius:10px; padding:11px 12px; font-size:15px; font-family:inherit;
+  }
+  textarea{min-height:130px; resize:vertical}
+  .row{display:flex; gap:10px} .row>*{flex:1}
+  .drop{
+    border:2px dashed var(--line); border-radius:12px; padding:22px; text-align:center;
+    color:var(--mut); cursor:pointer; transition:.15s; background:var(--card2);
+  }
+  .drop.hover{border-color:var(--accent); color:var(--ink)}
+  .switch{display:flex; align-items:center; gap:10px; margin-top:14px; cursor:pointer; user-select:none}
+  .switch input{display:none}
+  .track{width:44px;height:26px;border-radius:999px;background:var(--line);position:relative;transition:.15s}
+  .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}
+  .switch input:checked + .track{background:var(--accent)}
+  .switch input:checked + .track .knob{left:21px}
+  .muted{color:var(--mut); font-size:12.5px}
+  .btn{
+    margin-top:18px; width:100%; border:0; border-radius:12px; padding:14px; cursor:pointer;
+    font-weight:800; font-size:16px; color:#fff; letter-spacing:.3px;
+    background:linear-gradient(135deg,var(--accent),#ff8a5c);
+  }
+  .btn:disabled{filter:grayscale(.6) brightness(.8); cursor:not-allowed}
+  .btn.busy{opacity:.7}
+  .toast{position:fixed; left:50%; bottom:22px; transform:translateX(-50%);
+    background:#111; color:#fff; padding:11px 18px; border-radius:10px; opacity:0; pointer-events:none;
+    transition:.25s; font-weight:600; box-shadow:var(--shadow)}
+  .toast.show{opacity:1}
+  .toast.ok{background:#12603f} .toast.bad{background:#7a2020}
+  .previewCard{position:sticky; top:16px}
+  .rollhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .rollhead b{font-size:13px;color:var(--mut);font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+  .paper{
+    background:var(--paper); color:#111; border-radius:6px; padding:14px 16px 26px;
+    box-shadow:inset 0 0 0 1px #e7e7df, var(--shadow); max-height:60vh; overflow:auto;
+    background-image:repeating-linear-gradient(#fbfbf7 0 27px,#f2f2ec 27px 28px);
+  }
+  .paper.txt{font:13px/1.55 "SFMono-Regular",ui-monospace,Menlo,Consolas,monospace; white-space:pre-wrap; word-break:break-word}
+  .paper img{width:100%; image-rendering:pixelated; display:block; background:#fff}
+  .paper .center{text-align:center} .paper .right{text-align:right}
+  .paper .big{font-size:19px; font-weight:700}
+  .len{font-size:12px;color:var(--mut);text-align:center;margin-top:8px}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">Prn<span>t</span>r</div>
+    <div class="status"><span id="dot" class="dot"></span><span id="stat">checking…</span></div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: controls -->
+    <div class="card pad">
+      <div class="tabs">
+        <div class="tab active" data-tab="text">✍️ Text</div>
+        <div class="tab" data-tab="image">🖼️ Image</div>
+      </div>
+
+      <!-- TEXT -->
+      <section id="tab-text">
+        <label>Title <span class="muted">(optional, big &amp; bold)</span></label>
+        <input type="text" id="t-title" placeholder="e.g. NOTICE">
+        <label>Message</label>
+        <textarea id="t-body" placeholder="Type anything… it wraps at {{ cols }} characters, just like the paper."></textarea>
+        <div class="row">
+          <div>
+            <label>Align</label>
+            <select id="t-align"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
+          </div>
+          <div>
+            <label>Size</label>
+            <select id="t-size"><option value="1">Normal</option><option value="2">Large</option></select>
+          </div>
+        </div>
+        <button class="btn" id="print-text">Print text</button>
+      </section>
+
+      <!-- IMAGE -->
+      <section id="tab-image" class="hide">
+        <div class="drop" id="drop">
+          <div id="drop-label">Tap to choose a photo, or drop one here</div>
+          <input type="file" id="file" accept="image/*" class="hide">
+        </div>
+        <div class="row">
+          <div>
+            <label>Orientation</label>
+            <select id="i-orient"><option value="auto">Auto</option><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
+          </div>
+          <div>
+            <label>Rendering</label>
+            <select id="i-dither"><option value="1">Dither (photos)</option><option value="0">Threshold (line art)</option></select>
+          </div>
+        </div>
+        <div id="thr-wrap" class="hide">
+          <label>Threshold <span class="muted" id="thr-val">128</span></label>
+          <input type="range" id="i-thr" min="40" max="220" value="128" style="width:100%">
+        </div>
+
+        <label class="switch"><input type="checkbox" id="i-pola"><span class="track"><span class="knob"></span></span>
+          <span>Polaroid frame <span class="muted">— framed photo + handwritten caption</span></span></label>
+        <div id="cap-wrap" class="hide">
+          <label>Caption</label>
+          <input type="text" id="i-cap" placeholder="Wish you were here ✨" maxlength="80">
+        </div>
+
+        <button class="btn" id="print-image" disabled>Print image</button>
+      </section>
+    </div>
+
+    <!-- RIGHT: live preview -->
+    <div class="card pad previewCard">
+      <div class="rollhead"><b>Live preview</b><span class="muted">{{ width }}px wide</span></div>
+      <div class="paper txt" id="preview">Your print appears here.</div>
+      <div class="len" id="len"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const COLS = {{ cols }};
+const $ = s => document.querySelector(s);
+const preview = $("#preview"), lenEl = $("#len");
+let curTab = "text", imgFile = null, prevTimer = null, prevURL = null;
+
+// ---- tabs
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  curTab = t.dataset.tab;
+  $("#tab-text").classList.toggle("hide", curTab !== "text");
+  $("#tab-image").classList.toggle("hide", curTab !== "image");
+  renderPreview();
+});
+
+// ---- toast
+function toast(msg, kind){
+  const el = $("#toast"); el.textContent = msg; el.className = "toast show " + (kind||"");
+  setTimeout(() => el.className = "toast", 2200);
+}
+
+// ---- status
+async function poll(){
+  try{
+    const s = await (await fetch("/api/status")).json();
+    $("#dot").className = "dot " + (s.online ? "ok" : "bad");
+    $("#stat").textContent = s.online ? `TM-m30II · ${s.host}` : `offline · ${s.host}`;
+  }catch{ $("#dot").className = "dot bad"; $("#stat").textContent = "app error"; }
+}
+poll(); setInterval(poll, 5000);
+
+// ---- text wrap that mirrors the printer's Font A columns
+function wrapMono(str, cols){
+  const out = [];
+  for(const para of str.split("\n")){
+    if(!para.trim()){ out.push(""); continue; }
+    let line = "";
+    for(const word of para.split(/\s+/)){
+      let w = word;
+      while(w.length > cols){ if(line){out.push(line); line="";} out.push(w.slice(0,cols)); w = w.slice(cols); }
+      if((line + (line?" ":"") + w).length <= cols){ line = line ? line+" "+w : w; }
+      else { if(line) out.push(line); line = w; }
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+// ---- TEXT preview — built with safe DOM nodes (no innerHTML)
+function renderTextPreview(){
+  const title = $("#t-title").value.trim();
+  const size = $("#t-size").value, align = $("#t-align").value;
+  preview.className = "paper txt";
+  preview.replaceChildren();
+  if(title){
+    const d = document.createElement("div");
+    d.className = "center big";
+    d.textContent = wrapMono(title, Math.max(1, Math.floor(COLS/2)));
+    preview.appendChild(d);
+  }
+  const cols = Math.max(1, Math.floor(COLS/(size==="2"?2:1)));
+  const b = document.createElement("div");
+  b.className = (align==="center"?"center":align==="right"?"right":"") + (size==="2"?" big":"");
+  b.textContent = wrapMono($("#t-body").value, cols) || "…";
+  preview.appendChild(b);
+  lenEl.textContent = "";
+}
+
+// ---- IMAGE preview — exact server render, shown via <img> (no innerHTML)
+async function renderImagePreview(){
+  if(!imgFile){ preview.className="paper txt"; preview.textContent="Choose a photo to see how it'll print."; lenEl.textContent=""; return; }
+  const fd = new FormData();
+  fd.append("image", imgFile);
+  fd.append("orientation", $("#i-orient").value);
+  fd.append("dither", $("#i-dither").value);
+  fd.append("threshold", $("#i-thr").value);
+  fd.append("polaroid", $("#i-pola").checked ? "1" : "0");
+  fd.append("caption", $("#i-cap").value);
+  try{
+    const r = await fetch("/api/preview/image", { method:"POST", body:fd });
+    if(!r.ok) throw new Error();
+    const blob = await r.blob();
+    if(prevURL) URL.revokeObjectURL(prevURL);
+    prevURL = URL.createObjectURL(blob);
+    preview.className = "paper";
+    preview.replaceChildren();
+    const im = document.createElement("img");
+    im.src = prevURL; im.alt = "print preview";
+    preview.appendChild(im);
+    const mm = r.headers.get("X-Print-Length-Mm");
+    lenEl.textContent = mm ? `≈ ${mm} mm of paper` : "";
+  }catch{ preview.className="paper txt"; preview.textContent="Couldn't render that image."; }
+}
+
+function renderPreview(){
+  clearTimeout(prevTimer);
+  prevTimer = setTimeout(curTab==="text" ? renderTextPreview : renderImagePreview, 180);
+}
+
+// ---- text inputs
+["#t-title","#t-body","#t-align","#t-size"].forEach(s => $(s).addEventListener("input", renderPreview));
+
+// ---- image inputs
+const drop = $("#drop"), fileInput = $("#file");
+drop.onclick = () => fileInput.click();
+["dragenter","dragover"].forEach(e => drop.addEventListener(e, ev=>{ev.preventDefault();drop.classList.add("hover");}));
+["dragleave","drop"].forEach(e => drop.addEventListener(e, ev=>{ev.preventDefault();drop.classList.remove("hover");}));
+drop.addEventListener("drop", ev => { if(ev.dataTransfer.files[0]) setFile(ev.dataTransfer.files[0]); });
+fileInput.onchange = () => { if(fileInput.files[0]) setFile(fileInput.files[0]); };
+function setFile(f){
+  imgFile = f;
+  $("#drop-label").textContent = "📷 " + f.name;
+  $("#print-image").disabled = false;
+  renderPreview();
+}
+$("#i-orient").addEventListener("change", renderPreview);
+$("#i-dither").addEventListener("change", () => {
+  $("#thr-wrap").classList.toggle("hide", $("#i-dither").value !== "0");
+  renderPreview();
+});
+$("#i-thr").addEventListener("input", () => { $("#thr-val").textContent = $("#i-thr").value; renderPreview(); });
+$("#i-pola").addEventListener("change", () => { $("#cap-wrap").classList.toggle("hide", !$("#i-pola").checked); renderPreview(); });
+$("#i-cap").addEventListener("input", renderPreview);
+
+// ---- print actions
+async function withBusy(btn, fn){
+  btn.classList.add("busy"); btn.disabled = true;
+  try{ await fn(); } finally { btn.classList.remove("busy"); btn.disabled = false; }
+}
+$("#print-text").onclick = () => withBusy($("#print-text"), async () => {
+  const body = $("#t-body").value.trim(), title = $("#t-title").value.trim();
+  if(!body && !title){ toast("Nothing to print", "bad"); return; }
+  const r = await fetch("/api/print/text", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ text:$("#t-body").value, title, align:$("#t-align").value, size:$("#t-size").value })
+  });
+  const j = await r.json().catch(()=>({}));
+  toast(r.ok ? "Printed ✓" : ("Failed: " + (j.error||"error")), r.ok ? "ok" : "bad");
+});
+$("#print-image").onclick = () => withBusy($("#print-image"), async () => {
+  if(!imgFile){ toast("Choose a photo first", "bad"); return; }
+  const fd = new FormData();
+  fd.append("image", imgFile);
+  fd.append("orientation", $("#i-orient").value);
+  fd.append("dither", $("#i-dither").value);
+  fd.append("threshold", $("#i-thr").value);
+  fd.append("polaroid", $("#i-pola").checked ? "1" : "0");
+  fd.append("caption", $("#i-cap").value);
+  const r = await fetch("/api/print/image", { method:"POST", body:fd });
+  const j = await r.json().catch(()=>({}));
+  toast(r.ok ? `Printed ✓ (${j.length_mm}mm)` : ("Failed: " + (j.error||"error")), r.ok ? "ok" : "bad");
+});
+
+renderTextPreview();
+</script>
+</body>
+</html>
