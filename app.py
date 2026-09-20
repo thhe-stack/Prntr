@@ -320,6 +320,8 @@ def build_checklist(title, items):
     title_font = load_banner_font(46)
     ia, idc = item_font.getmetrics()
     il = ia + idc + 6
+    cbb = _measure.textbbox((0, 0), "M", font=item_font)
+    cap_h = cbb[3] - cbb[1]                                # cap height, for box alignment
     text_x = margin + box + box_gap
     max_w = PRINT_WIDTH - text_x - margin
 
@@ -342,7 +344,9 @@ def build_checklist(title, items):
         y += title_h
 
     for lines, block_h in zip(wrapped, blocks):
-        box_top = y + (il - box) // 2
+        # first line's ink top is forced to y, so centre the box on the cap band —
+        # centring on the full line-advance would sit it too low.
+        box_top = y + (cap_h - box) // 2
         d.rectangle((margin, box_top, margin + box, box_top + box), outline=0, width=3)
         ty = y
         for ln in lines:
