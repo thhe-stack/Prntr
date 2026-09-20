@@ -2,7 +2,7 @@
 # Portainer > Stacks > Add stack > paste this. Set the image to YOUR ghcr repo.
 services:
   prntr:
-    image: ghcr.io/OWNER/REPO:latest      # <-- change OWNER/REPO after first GH Actions build
+    image: ghcr.io/thhe-stack/prntr:latest
     container_name: prntr
     restart: unless-stopped
     ports:

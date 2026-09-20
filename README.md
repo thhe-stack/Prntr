@@ -40,7 +40,7 @@ PRINTER_HOST=192.168.1.73 python app.py
    (or repo name) → Package settings → set visibility to **Public**
    *(or, if you keep it private, add GHCR registry credentials in Portainer)*.
 3. In **Portainer → Stacks → Add stack**, paste `docker-compose.yml`, then:
-   - set `image:` to `ghcr.io/<your-user>/<your-repo>:latest`
+   - set `image:` to `ghcr.io/thhe-stack/prntr:latest`
    - set `PRINTER_HOST` to your printer's reserved IP
    - **Deploy**.
 4. Open **http://<thinksmart-ip>:8080** from any device on the LAN.
