@@ -10,6 +10,7 @@ import os
 import socket
 import textwrap
 
+import numpy as np
 from flask import Flask, request, jsonify, send_file, render_template
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 from escpos.printer import Network
@@ -22,7 +23,10 @@ COLS = PRINT_WIDTH // 12                                    # Font A columns (12
 DOTS_PER_MM = 8                                            # 203 dpi ≈ 8 dots/mm
 # Blank leading feed so the cutter's non-printable top zone doesn't clip line 1.
 TOP_MARGIN_DOTS = int(os.environ.get("TOP_MARGIN_DOTS", "40"))  # ≈ 5 mm
-FONT_PATH = os.path.join(os.path.dirname(__file__), "assets", "PatrickHand-Regular.ttf")
+
+_ASSETS = os.path.join(os.path.dirname(__file__), "assets")
+FONT_PATH = os.path.join(_ASSETS, "PatrickHand-Regular.ttf")   # handwritten (captions, checklist)
+BANNER_FONT_PATH = os.path.join(_ASSETS, "Anton-Regular.ttf")  # bold display (banners, headings)
 
 app = Flask(__name__)
 
@@ -35,6 +39,13 @@ def load_font(size):
         return ImageFont.truetype(FONT_PATH, size)
     except OSError:
         return ImageFont.load_default()
+
+
+def load_banner_font(size):
+    try:
+        return ImageFont.truetype(BANNER_FONT_PATH, size)
+    except OSError:
+        return load_font(size)
 
 
 def printer_online():
@@ -66,6 +77,118 @@ def feed_top(p):
             p.text("\n")
 
 
+def print_raster(bw):
+    """Send a finished 1-bit image to the printer with a top margin and cut."""
+    p = connect()
+    feed_top(p)
+    p.image(bw, impl="bitImageRaster")
+    p.cut(mode="PART")
+    p.close()
+
+
+def png_response(bw):
+    buf = io.BytesIO()
+    bw.save(buf, "PNG")
+    buf.seek(0)
+    resp = send_file(buf, mimetype="image/png")
+    resp.headers["X-Print-Length-Mm"] = str(round(bw.height / DOTS_PER_MM))
+    return resp
+
+
+# ---------------------------------------------------------------- 1-bit renderers
+_BAYER8 = np.array([
+    [0, 48, 12, 60, 3, 51, 15, 63], [32, 16, 44, 28, 35, 19, 47, 31],
+    [8, 56, 4, 52, 11, 59, 7, 55], [40, 24, 36, 20, 43, 27, 39, 23],
+    [2, 50, 14, 62, 1, 49, 13, 61], [34, 18, 46, 30, 33, 17, 45, 29],
+    [10, 58, 6, 54, 9, 57, 5, 53], [42, 26, 38, 22, 41, 25, 37, 21],
+], dtype=np.float32)
+
+
+def dither_atkinson(gray):
+    """Atkinson error diffusion — sparser dots than Floyd–Steinberg, ideal for thermal."""
+    a = np.asarray(gray, dtype=np.float32).copy()
+    h, w = a.shape
+    for y in range(h):
+        for x in range(w):
+            old = a[y, x]
+            new = 255.0 if old >= 128.0 else 0.0
+            a[y, x] = new
+            err = (old - new) / 8.0
+            if x + 1 < w:
+                a[y, x + 1] += err
+            if x + 2 < w:
+                a[y, x + 2] += err
+            if y + 1 < h:
+                if x - 1 >= 0:
+                    a[y + 1, x - 1] += err
+                a[y + 1, x] += err
+                if x + 1 < w:
+                    a[y + 1, x + 1] += err
+            if y + 2 < h:
+                a[y + 2, x] += err
+    out = (a >= 128).astype(np.uint8) * 255
+    return Image.fromarray(out, "L").convert("1")
+
+
+def dither_ordered(gray):
+    """Bayer 8×8 ordered dither — a stable retro halftone that never smears."""
+    a = np.asarray(gray, dtype=np.float32)
+    h, w = a.shape
+    thr = (np.tile(_BAYER8, (h // 8 + 1, w // 8 + 1))[:h, :w] + 0.5) * (255.0 / 64.0)
+    out = (a > thr).astype(np.uint8) * 255
+    return Image.fromarray(out, "L").convert("1")
+
+
+def render_edge(gray, threshold):
+    """Sobel edge trace — a coloring-book outline; ink-light and crisp."""
+    a = np.asarray(gray, dtype=np.float32)
+    p = np.pad(a, 1, mode="edge")
+    h, w = a.shape
+    tl, tc, tr = p[0:h, 0:w], p[0:h, 1:w + 1], p[0:h, 2:w + 2]
+    ml, mr = p[1:h + 1, 0:w], p[1:h + 1, 2:w + 2]
+    bl, bc, br = p[2:h + 2, 0:w], p[2:h + 2, 1:w + 1], p[2:h + 2, 2:w + 2]
+    gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl)
+    gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr)
+    mag = np.hypot(gx, gy)
+    mag = mag / (mag.max() + 1e-6) * 255.0
+    out = np.where(mag >= float(threshold), 0, 255).astype(np.uint8)  # black edges on white
+    return Image.fromarray(out, "L").convert("1")
+
+
+def render_halftone(gray, cell):
+    """Newspaper-style halftone: one black dot per cell, sized by darkness."""
+    a = np.asarray(gray, dtype=np.float32)
+    h, w = a.shape
+    cell = max(4, min(16, int(cell)))
+    canvas = Image.new("1", (w, h), 1)
+    d = ImageDraw.Draw(canvas)
+    for cy in range(0, h, cell):
+        for cx in range(0, w, cell):
+            darkness = 1.0 - (a[cy:cy + cell, cx:cx + cell].mean() / 255.0)
+            if darkness <= 0.02:
+                continue
+            r = (cell / 2.0) * (darkness ** 0.5)   # dot area ∝ darkness
+            ccx, ccy = cx + cell / 2.0, cy + cell / 2.0
+            d.ellipse((ccx - r, ccy - r, ccx + r, ccy + r), fill=0)
+    return canvas
+
+
+def reduce_1bit(gray, method, threshold, cell):
+    if method == "atkinson":
+        return dither_atkinson(gray)
+    if method == "ordered":
+        return dither_ordered(gray)
+    if method == "threshold":
+        t = int(threshold)
+        return gray.point(lambda v: 255 if v >= t else 0).convert("1")
+    if method == "edge":
+        return render_edge(gray, threshold)
+    if method == "halftone":
+        return render_halftone(gray, cell)
+    return gray.convert("1")                       # floyd (default)
+
+
+# ---------------------------------------------------------------- image modes
 def flatten(img):
     """Drop alpha onto white so transparency doesn't print as black."""
     if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
@@ -76,22 +199,54 @@ def flatten(img):
     return img.convert("RGB")
 
 
-def render_photo(img, target_width, orientation, dither, threshold):
-    """Fit an image to `target_width` dots and reduce it to crisp 1-bit."""
-    img = ImageOps.exif_transpose(flatten(img))          # respect phone rotation
+def render_photo(img, target_width, orientation, method, threshold, cell):
+    """Fit an image to `target_width` dots and reduce it to 1-bit via `method`."""
+    img = ImageOps.exif_transpose(flatten(img))
     w, h = img.size
     if orientation == "landscape" or (orientation == "auto" and w > h):
         img = img.rotate(90, expand=True)
         w, h = img.size
     new_h = max(1, round(h * target_width / w))
     img = img.resize((target_width, new_h), Image.LANCZOS)
-    g = ImageOps.grayscale(img)
-    if dither:
-        return g.convert("1")                            # Floyd–Steinberg
-    t = int(threshold)
-    return g.point(lambda p: 255 if p >= t else 0).convert("1")
+    return reduce_1bit(ImageOps.grayscale(img), method, threshold, cell)
 
 
+def make_plain(img, orientation, method, threshold, cell):
+    return render_photo(img, PRINT_WIDTH, orientation, method, threshold, cell)
+
+
+def make_polaroid(img, caption, orientation, method, threshold, cell):
+    """A framed photo with a handwritten caption in the wide bottom border."""
+    side, top, gap, bottom = 26, 26, 18, 34
+    photo = render_photo(img, PRINT_WIDTH - 2 * side, orientation, method, threshold, cell)
+
+    caption = (caption or "").strip()
+    lines, font = (fit_font(caption, PRINT_WIDTH - 2 * side, load_font, 46, 22, 2)
+                   if caption else ([], None))
+    line_h = (font.getbbox("Ag")[3] + 8) if font else 0
+    cap_h = (len(lines) * line_h + 20) if lines else 46
+
+    total_h = top + photo.height + gap + cap_h + bottom
+    canvas = Image.new("1", (PRINT_WIDTH, total_h), 1)
+    canvas.paste(photo, (side, top))
+    if lines:
+        canvas.paste(_text_block(lines, font, cap_h, "center"),
+                     (0, top + photo.height + gap))
+    return canvas
+
+
+def build_image(file_storage, form):
+    img = Image.open(file_storage.stream)
+    orientation = form.get("orientation", "auto")
+    method = form.get("method", "floyd")
+    threshold = int(form.get("threshold", "128"))
+    cell = int(form.get("cell", "7"))
+    if form.get("polaroid", "0") == "1":
+        return make_polaroid(img, form.get("caption", ""), orientation, method, threshold, cell)
+    return make_plain(img, orientation, method, threshold, cell)
+
+
+# ---------------------------------------------------------------- text layout
 def wrap_pixels(text, font, max_w):
     words = " ".join(text.split()).split(" ")
     lines, cur = [], ""
@@ -107,56 +262,96 @@ def wrap_pixels(text, font, max_w):
     return lines or [""]
 
 
-def fit_caption(text, max_w, max_lines=2):
-    for size in range(46, 21, -2):
-        font = load_font(size)
+def fit_font(text, max_w, loader, big, small, max_lines):
+    """Pick the largest font (from `loader`) that wraps `text` within the box."""
+    for size in range(big, small - 1, -2):
+        font = loader(size)
         lines = wrap_pixels(text, font, max_w)
-        if len(lines) <= max_lines:
+        widest = max(_measure.textlength(ln, font=font) for ln in lines)
+        if widest <= max_w and len(lines) <= max_lines:
             return lines, font
-    font = load_font(22)
-    return wrap_pixels(text, font, max_w)[:max_lines], font
+    font = loader(small)
+    return wrap_pixels(text, font, max_w), font
 
 
-def make_plain(img, orientation, dither, threshold):
-    return render_photo(img, PRINT_WIDTH, orientation, dither, threshold)
+def _text_block(lines, font, height, align):
+    """Render centered/left lines to a crisp 1-bit strip of the given height."""
+    layer = Image.new("L", (PRINT_WIDTH, height), 255)
+    d = ImageDraw.Draw(layer)
+    line_h = font.getbbox("Ag")[3] + 8
+    y = 8
+    for ln in lines:
+        bb = d.textbbox((0, 0), ln, font=font)
+        tw = bb[2] - bb[0]
+        x = (PRINT_WIDTH - tw) // 2 - bb[0] if align == "center" else 18 - bb[0]
+        d.text((x, y - bb[1]), ln, font=font, fill=0)
+        y += line_h
+    return layer.point(lambda v: 255 if v >= 128 else 0).convert("1")
 
 
-def make_polaroid(img, caption, orientation, dither, threshold):
-    """A framed photo with a handwritten caption in the wide bottom border."""
-    side, top, gap, bottom = 26, 26, 18, 34
-    photo = render_photo(img, PRINT_WIDTH - 2 * side, orientation, dither, threshold)
+# ---------------------------------------------------------------- banner + checklist
+def build_banner(text):
+    """One or more lines of huge bold display type, filling the paper width."""
+    margin = 18
+    max_w = PRINT_WIDTH - 2 * margin
+    lines, font = fit_font((text or "").strip() or " ", max_w, load_banner_font, 190, 16, 6)
+    asc, desc = font.getmetrics()
+    line_h = asc + desc + 10
+    total_h = margin + line_h * len(lines) + margin
+    canvas = Image.new("L", (PRINT_WIDTH, total_h), 255)
+    d = ImageDraw.Draw(canvas)
+    y = margin
+    for ln in lines:
+        bb = d.textbbox((0, 0), ln, font=font)
+        tw = bb[2] - bb[0]
+        d.text(((PRINT_WIDTH - tw) // 2 - bb[0], y - bb[1]), ln, font=font, fill=0)
+        y += line_h
+    return canvas.point(lambda v: 255 if v >= 128 else 0).convert("1")
 
-    caption = (caption or "").strip()
-    lines, font = (fit_caption(caption, PRINT_WIDTH - 2 * side) if caption else ([], None))
-    line_h = (font.getbbox("Ag")[3] + 8) if font else 0
-    cap_h = (len(lines) * line_h + 20) if lines else 46
 
-    total_h = top + photo.height + gap + cap_h + bottom
-    canvas = Image.new("1", (PRINT_WIDTH, total_h), 1)   # 1 = white
-    canvas.paste(photo, (side, top))
+def build_checklist(title, items):
+    """A title plus a list of items, each with an empty ☐ checkbox to tick by hand."""
+    if isinstance(items, str):
+        items = items.split("\n")
+    items = [it.strip() for it in items if it and it.strip()]
 
-    if lines:
-        layer = Image.new("L", (PRINT_WIDTH, cap_h), 255)
-        d = ImageDraw.Draw(layer)
-        y = 8
+    margin, box, box_gap, item_gap = 22, 30, 16, 16
+    item_font = load_font(34)
+    title_font = load_banner_font(46)
+    ia, idc = item_font.getmetrics()
+    il = ia + idc + 6
+    text_x = margin + box + box_gap
+    max_w = PRINT_WIDTH - text_x - margin
+
+    title = (title or "").strip()
+    ta, tdc = title_font.getmetrics()
+    title_h = (ta + tdc + 22) if title else 0
+
+    wrapped = [wrap_pixels(it, item_font, max_w) for it in items]
+    blocks = [max(box, len(w) * il) for w in wrapped]
+    total_h = margin + title_h + sum(b + item_gap for b in blocks) + margin
+    total_h = max(total_h, margin + title_h + margin)
+
+    canvas = Image.new("L", (PRINT_WIDTH, total_h), 255)
+    d = ImageDraw.Draw(canvas)
+    y = margin
+    if title:
+        bb = d.textbbox((0, 0), title, font=title_font)
+        d.text(((PRINT_WIDTH - (bb[2] - bb[0])) // 2 - bb[0], y - bb[1]), title,
+               font=title_font, fill=0)
+        y += title_h
+
+    for lines, block_h in zip(wrapped, blocks):
+        box_top = y + (il - box) // 2
+        d.rectangle((margin, box_top, margin + box, box_top + box), outline=0, width=3)
+        ty = y
         for ln in lines:
-            bb = d.textbbox((0, 0), ln, font=font)
-            tw = bb[2] - bb[0]
-            d.text(((PRINT_WIDTH - tw) // 2 - bb[0], y - bb[1]), ln, font=font, fill=0)
-            y += line_h
-        crisp = layer.point(lambda p: 255 if p >= 128 else 0).convert("1")
-        canvas.paste(crisp, (0, top + photo.height + gap))
-    return canvas
+            bb = d.textbbox((0, 0), ln, font=item_font)
+            d.text((text_x - bb[0], ty - bb[1]), ln, font=item_font, fill=0)
+            ty += il
+        y += block_h + item_gap
 
-
-def build_image(file_storage, form):
-    img = Image.open(file_storage.stream)
-    orientation = form.get("orientation", "auto")
-    dither = form.get("dither", "1") == "1"
-    threshold = int(form.get("threshold", "128"))
-    if form.get("polaroid", "0") == "1":
-        return make_polaroid(img, form.get("caption", ""), orientation, dither, threshold)
-    return make_plain(img, orientation, dither, threshold)
+    return canvas.point(lambda v: 255 if v >= 128 else 0).convert("1")
 
 
 # ---------------------------------------------------------------- routes
@@ -174,26 +369,48 @@ def status():
 
 @app.route("/api/preview/image", methods=["POST"])
 def preview_image():
-    bw = build_image(request.files["image"], request.form)
-    buf = io.BytesIO()
-    bw.save(buf, "PNG")
-    buf.seek(0)
-    resp = send_file(buf, mimetype="image/png")
-    resp.headers["X-Print-Length-Mm"] = str(round(bw.height / DOTS_PER_MM))
-    return resp
+    return png_response(build_image(request.files["image"], request.form))
 
 
 @app.route("/api/print/image", methods=["POST"])
 def print_image():
     try:
         bw = build_image(request.files["image"], request.form)
-        p = connect()
-        feed_top(p)
-        p.image(bw, impl="bitImageRaster")
-        p.cut(mode="PART")
-        p.close()
+        print_raster(bw)
         return jsonify(ok=True, length_mm=round(bw.height / DOTS_PER_MM))
     except Exception as e:  # noqa: BLE001 — surface any failure to the UI
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route("/api/preview/banner", methods=["POST"])
+def preview_banner():
+    return png_response(build_banner(request.get_json(force=True).get("text", "")))
+
+
+@app.route("/api/print/banner", methods=["POST"])
+def print_banner():
+    try:
+        bw = build_banner(request.get_json(force=True).get("text", ""))
+        print_raster(bw)
+        return jsonify(ok=True, length_mm=round(bw.height / DOTS_PER_MM))
+    except Exception as e:  # noqa: BLE001
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route("/api/preview/checklist", methods=["POST"])
+def preview_checklist():
+    data = request.get_json(force=True)
+    return png_response(build_checklist(data.get("title", ""), data.get("items", "")))
+
+
+@app.route("/api/print/checklist", methods=["POST"])
+def print_checklist():
+    try:
+        data = request.get_json(force=True)
+        bw = build_checklist(data.get("title", ""), data.get("items", ""))
+        print_raster(bw)
+        return jsonify(ok=True, length_mm=round(bw.height / DOTS_PER_MM))
+    except Exception as e:  # noqa: BLE001
         return jsonify(ok=False, error=str(e)), 500
 
 

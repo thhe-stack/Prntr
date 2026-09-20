@@ -33,15 +33,15 @@
   @media (max-width:760px){ .grid{grid-template-columns:1fr} }
   .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
   .pad{padding:18px}
-  .tabs{display:flex; gap:6px; padding:6px; background:var(--card2); border-radius:12px; margin-bottom:16px}
-  .tab{flex:1; text-align:center; padding:10px; border-radius:9px; cursor:pointer; color:var(--mut); font-weight:600}
+  .tabs{display:flex; gap:4px; padding:6px; background:var(--card2); border-radius:12px; margin-bottom:16px}
+  .tab{flex:1; text-align:center; padding:10px 4px; border-radius:9px; cursor:pointer; color:var(--mut); font-weight:600; font-size:14px}
   .tab.active{background:var(--card); color:var(--ink); box-shadow:var(--shadow)}
   label{display:block; font-size:13px; color:var(--mut); margin:14px 0 6px; font-weight:600}
   textarea,input[type=text],select{
     width:100%; background:var(--card2); color:var(--ink); border:1px solid var(--line);
     border-radius:10px; padding:11px 12px; font-size:15px; font-family:inherit;
   }
-  textarea{min-height:130px; resize:vertical}
+  textarea{min-height:120px; resize:vertical}
   .row{display:flex; gap:10px} .row>*{flex:1}
   .drop{
     border:2px dashed var(--line); border-radius:12px; padding:22px; text-align:center;
@@ -91,11 +91,12 @@
   </header>
 
   <div class="grid">
-    <!-- LEFT: controls -->
     <div class="card pad">
       <div class="tabs">
         <div class="tab active" data-tab="text">✍️ Text</div>
         <div class="tab" data-tab="image">🖼️ Image</div>
+        <div class="tab" data-tab="banner">🔠 Banner</div>
+        <div class="tab" data-tab="checklist">☑️ List</div>
       </div>
 
       <!-- TEXT -->
@@ -105,14 +106,10 @@
         <label>Message</label>
         <textarea id="t-body" placeholder="Type anything… it wraps at {{ cols }} characters, just like the paper."></textarea>
         <div class="row">
-          <div>
-            <label>Align</label>
-            <select id="t-align"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
-          </div>
-          <div>
-            <label>Size</label>
-            <select id="t-size"><option value="1">Normal</option><option value="2">Large</option></select>
-          </div>
+          <div><label>Align</label>
+            <select id="t-align"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
+          <div><label>Size</label>
+            <select id="t-size"><option value="1">Normal</option><option value="2">Large</option></select></div>
         </div>
         <button class="btn" id="print-text">Print text</button>
       </section>
@@ -124,32 +121,52 @@
           <input type="file" id="file" accept="image/*" class="hide">
         </div>
         <div class="row">
-          <div>
-            <label>Orientation</label>
-            <select id="i-orient"><option value="auto">Auto</option><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
-          </div>
-          <div>
-            <label>Rendering</label>
-            <select id="i-dither"><option value="1">Dither (photos)</option><option value="0">Threshold (line art)</option></select>
-          </div>
+          <div><label>Orientation</label>
+            <select id="i-orient"><option value="auto">Auto</option><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></div>
+          <div><label>Rendering</label>
+            <select id="i-method">
+              <option value="floyd">Dither — Floyd (photos)</option>
+              <option value="atkinson">Dither — Atkinson (thermal)</option>
+              <option value="ordered">Dither — Ordered (retro)</option>
+              <option value="threshold">Threshold (line art)</option>
+              <option value="edge">Edge trace (outline)</option>
+              <option value="halftone">Halftone dots</option>
+            </select></div>
         </div>
         <div id="thr-wrap" class="hide">
-          <label>Threshold <span class="muted" id="thr-val">128</span></label>
+          <label><span id="thr-label">Threshold</span> <span class="muted" id="thr-val">128</span></label>
           <input type="range" id="i-thr" min="40" max="220" value="128" style="width:100%">
         </div>
-
+        <div id="cell-wrap" class="hide">
+          <label>Dot size <span class="muted" id="cell-val">7</span></label>
+          <input type="range" id="i-cell" min="4" max="16" value="7" style="width:100%">
+        </div>
         <label class="switch"><input type="checkbox" id="i-pola"><span class="track"><span class="knob"></span></span>
           <span>Polaroid frame <span class="muted">— framed photo + handwritten caption</span></span></label>
         <div id="cap-wrap" class="hide">
           <label>Caption</label>
           <input type="text" id="i-cap" placeholder="Wish you were here ✨" maxlength="80">
         </div>
-
         <button class="btn" id="print-image" disabled>Print image</button>
+      </section>
+
+      <!-- BANNER -->
+      <section id="tab-banner" class="hide">
+        <label>Banner text <span class="muted">— huge bold headline, fills the width</span></label>
+        <textarea id="ban-text" placeholder="SALE&#10;TODAY ONLY"></textarea>
+        <button class="btn" id="print-banner">Print banner</button>
+      </section>
+
+      <!-- CHECKLIST -->
+      <section id="tab-checklist" class="hide">
+        <label>Title <span class="muted">(optional)</span></label>
+        <input type="text" id="cl-title" placeholder="Packing list">
+        <label>Items <span class="muted">— one per line, each gets a ☐ to tick</span></label>
+        <textarea id="cl-items" placeholder="Passport&#10;Phone charger&#10;Sunscreen"></textarea>
+        <button class="btn" id="print-checklist">Print checklist</button>
       </section>
     </div>
 
-    <!-- RIGHT: live preview -->
     <div class="card pad previewCard">
       <div class="rollhead"><b>Live preview</b><span class="muted">{{ width }}px wide</span></div>
       <div class="paper txt" id="preview">Your print appears here.</div>
@@ -165,23 +182,20 @@ const $ = s => document.querySelector(s);
 const preview = $("#preview"), lenEl = $("#len");
 let curTab = "text", imgFile = null, prevTimer = null, prevURL = null;
 
-// ---- tabs
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   t.classList.add("active");
   curTab = t.dataset.tab;
-  $("#tab-text").classList.toggle("hide", curTab !== "text");
-  $("#tab-image").classList.toggle("hide", curTab !== "image");
+  ["text","image","banner","checklist"].forEach(n =>
+    $("#tab-"+n).classList.toggle("hide", curTab !== n));
   renderPreview();
 });
 
-// ---- toast
 function toast(msg, kind){
   const el = $("#toast"); el.textContent = msg; el.className = "toast show " + (kind||"");
   setTimeout(() => el.className = "toast", 2200);
 }
 
-// ---- status
 async function poll(){
   try{
     const s = await (await fetch("/api/status")).json();
@@ -191,7 +205,25 @@ async function poll(){
 }
 poll(); setInterval(poll, 5000);
 
-// ---- text wrap that mirrors the printer's Font A columns
+// ---------- shared preview helpers ----------
+function showText(node){ preview.className = "paper txt"; preview.replaceChildren(node); lenEl.textContent = ""; }
+function showPng(blob, mm){
+  if(prevURL) URL.revokeObjectURL(prevURL);
+  prevURL = URL.createObjectURL(blob);
+  preview.className = "paper"; preview.replaceChildren();
+  const im = document.createElement("img"); im.src = prevURL; im.alt = "print preview";
+  preview.appendChild(im);
+  lenEl.textContent = mm ? `≈ ${mm} mm of paper` : "";
+}
+async function serverPreview(url, opts){
+  try{
+    const r = await fetch(url, opts);
+    if(!r.ok) throw new Error();
+    showPng(await r.blob(), r.headers.get("X-Print-Length-Mm"));
+  }catch{ const d=document.createElement("div"); d.textContent="Couldn't render that."; showText(d); }
+}
+
+// ---------- TEXT (client-side wrap) ----------
 function wrapMono(str, cols){
   const out = [];
   for(const para of str.split("\n")){
@@ -207,110 +239,104 @@ function wrapMono(str, cols){
   }
   return out.join("\n");
 }
-
-// ---- TEXT preview — built with safe DOM nodes (no innerHTML)
 function renderTextPreview(){
-  const title = $("#t-title").value.trim();
-  const size = $("#t-size").value, align = $("#t-align").value;
-  preview.className = "paper txt";
-  preview.replaceChildren();
+  const title = $("#t-title").value.trim(), size = $("#t-size").value, align = $("#t-align").value;
+  preview.className = "paper txt"; preview.replaceChildren();
   if(title){
-    const d = document.createElement("div");
-    d.className = "center big";
-    d.textContent = wrapMono(title, Math.max(1, Math.floor(COLS/2)));
-    preview.appendChild(d);
+    const d = document.createElement("div"); d.className = "center big";
+    d.textContent = wrapMono(title, Math.max(1, Math.floor(COLS/2))); preview.appendChild(d);
   }
   const cols = Math.max(1, Math.floor(COLS/(size==="2"?2:1)));
   const b = document.createElement("div");
   b.className = (align==="center"?"center":align==="right"?"right":"") + (size==="2"?" big":"");
   b.textContent = wrapMono($("#t-body").value, cols) || "…";
-  preview.appendChild(b);
-  lenEl.textContent = "";
+  preview.appendChild(b); lenEl.textContent = "";
 }
 
-// ---- IMAGE preview — exact server render, shown via <img> (no innerHTML)
-async function renderImagePreview(){
-  if(!imgFile){ preview.className="paper txt"; preview.textContent="Choose a photo to see how it'll print."; lenEl.textContent=""; return; }
+// ---------- IMAGE ----------
+function imageForm(){
   const fd = new FormData();
   fd.append("image", imgFile);
   fd.append("orientation", $("#i-orient").value);
-  fd.append("dither", $("#i-dither").value);
+  fd.append("method", $("#i-method").value);
   fd.append("threshold", $("#i-thr").value);
+  fd.append("cell", $("#i-cell").value);
   fd.append("polaroid", $("#i-pola").checked ? "1" : "0");
   fd.append("caption", $("#i-cap").value);
-  try{
-    const r = await fetch("/api/preview/image", { method:"POST", body:fd });
-    if(!r.ok) throw new Error();
-    const blob = await r.blob();
-    if(prevURL) URL.revokeObjectURL(prevURL);
-    prevURL = URL.createObjectURL(blob);
-    preview.className = "paper";
-    preview.replaceChildren();
-    const im = document.createElement("img");
-    im.src = prevURL; im.alt = "print preview";
-    preview.appendChild(im);
-    const mm = r.headers.get("X-Print-Length-Mm");
-    lenEl.textContent = mm ? `≈ ${mm} mm of paper` : "";
-  }catch{ preview.className="paper txt"; preview.textContent="Couldn't render that image."; }
+  return fd;
+}
+function renderImagePreview(){
+  if(!imgFile){ const d=document.createElement("div"); d.textContent="Choose a photo to see how it'll print."; showText(d); return; }
+  serverPreview("/api/preview/image", { method:"POST", body:imageForm() });
+}
+
+// ---------- BANNER / CHECKLIST ----------
+function renderBannerPreview(){
+  if(!$("#ban-text").value.trim()){ const d=document.createElement("div"); d.textContent="Type a headline."; showText(d); return; }
+  serverPreview("/api/preview/banner", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ text:$("#ban-text").value }) });
+}
+function renderChecklistPreview(){
+  if(!$("#cl-items").value.trim() && !$("#cl-title").value.trim()){ const d=document.createElement("div"); d.textContent="Add some items."; showText(d); return; }
+  serverPreview("/api/preview/checklist", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ title:$("#cl-title").value, items:$("#cl-items").value }) });
 }
 
 function renderPreview(){
   clearTimeout(prevTimer);
-  prevTimer = setTimeout(curTab==="text" ? renderTextPreview : renderImagePreview, 180);
+  const fn = { text:renderTextPreview, image:renderImagePreview, banner:renderBannerPreview, checklist:renderChecklistPreview }[curTab];
+  prevTimer = setTimeout(fn, 200);
 }
 
-// ---- text inputs
+// ---------- input wiring ----------
 ["#t-title","#t-body","#t-align","#t-size"].forEach(s => $(s).addEventListener("input", renderPreview));
+$("#ban-text").addEventListener("input", renderPreview);
+["#cl-title","#cl-items"].forEach(s => $(s).addEventListener("input", renderPreview));
 
-// ---- image inputs
 const drop = $("#drop"), fileInput = $("#file");
 drop.onclick = () => fileInput.click();
 ["dragenter","dragover"].forEach(e => drop.addEventListener(e, ev=>{ev.preventDefault();drop.classList.add("hover");}));
 ["dragleave","drop"].forEach(e => drop.addEventListener(e, ev=>{ev.preventDefault();drop.classList.remove("hover");}));
 drop.addEventListener("drop", ev => { if(ev.dataTransfer.files[0]) setFile(ev.dataTransfer.files[0]); });
 fileInput.onchange = () => { if(fileInput.files[0]) setFile(fileInput.files[0]); };
-function setFile(f){
-  imgFile = f;
-  $("#drop-label").textContent = "📷 " + f.name;
-  $("#print-image").disabled = false;
-  renderPreview();
-}
+function setFile(f){ imgFile = f; $("#drop-label").textContent = "📷 " + f.name; $("#print-image").disabled = false; renderPreview(); }
+
 $("#i-orient").addEventListener("change", renderPreview);
-$("#i-dither").addEventListener("change", () => {
-  $("#thr-wrap").classList.toggle("hide", $("#i-dither").value !== "0");
+$("#i-method").addEventListener("change", () => {
+  const m = $("#i-method").value;
+  const showThr = (m === "threshold" || m === "edge");
+  $("#thr-wrap").classList.toggle("hide", !showThr);
+  $("#thr-label").textContent = (m === "edge") ? "Edge sensitivity" : "Threshold";
+  $("#cell-wrap").classList.toggle("hide", m !== "halftone");
   renderPreview();
 });
 $("#i-thr").addEventListener("input", () => { $("#thr-val").textContent = $("#i-thr").value; renderPreview(); });
+$("#i-cell").addEventListener("input", () => { $("#cell-val").textContent = $("#i-cell").value; renderPreview(); });
 $("#i-pola").addEventListener("change", () => { $("#cap-wrap").classList.toggle("hide", !$("#i-pola").checked); renderPreview(); });
 $("#i-cap").addEventListener("input", renderPreview);
 
-// ---- print actions
-async function withBusy(btn, fn){
-  btn.classList.add("busy"); btn.disabled = true;
-  try{ await fn(); } finally { btn.classList.remove("busy"); btn.disabled = false; }
-}
+// ---------- print actions ----------
+async function withBusy(btn, fn){ btn.classList.add("busy"); btn.disabled = true; try{ await fn(); } finally { btn.classList.remove("busy"); btn.disabled = false; } }
+async function postJSON(url, body){ const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); return [r, await r.json().catch(()=>({}))]; }
+function done(r, j){ toast(r.ok ? (j.length_mm ? `Printed ✓ (${j.length_mm}mm)` : "Printed ✓") : ("Failed: "+(j.error||"error")), r.ok?"ok":"bad"); }
+
 $("#print-text").onclick = () => withBusy($("#print-text"), async () => {
-  const body = $("#t-body").value.trim(), title = $("#t-title").value.trim();
-  if(!body && !title){ toast("Nothing to print", "bad"); return; }
-  const r = await fetch("/api/print/text", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ text:$("#t-body").value, title, align:$("#t-align").value, size:$("#t-size").value })
-  });
-  const j = await r.json().catch(()=>({}));
-  toast(r.ok ? "Printed ✓" : ("Failed: " + (j.error||"error")), r.ok ? "ok" : "bad");
+  if(!$("#t-body").value.trim() && !$("#t-title").value.trim()){ toast("Nothing to print","bad"); return; }
+  const [r,j] = await postJSON("/api/print/text", { text:$("#t-body").value, title:$("#t-title").value.trim(), align:$("#t-align").value, size:$("#t-size").value });
+  done(r,j);
 });
 $("#print-image").onclick = () => withBusy($("#print-image"), async () => {
-  if(!imgFile){ toast("Choose a photo first", "bad"); return; }
-  const fd = new FormData();
-  fd.append("image", imgFile);
-  fd.append("orientation", $("#i-orient").value);
-  fd.append("dither", $("#i-dither").value);
-  fd.append("threshold", $("#i-thr").value);
-  fd.append("polaroid", $("#i-pola").checked ? "1" : "0");
-  fd.append("caption", $("#i-cap").value);
-  const r = await fetch("/api/print/image", { method:"POST", body:fd });
-  const j = await r.json().catch(()=>({}));
-  toast(r.ok ? `Printed ✓ (${j.length_mm}mm)` : ("Failed: " + (j.error||"error")), r.ok ? "ok" : "bad");
+  if(!imgFile){ toast("Choose a photo first","bad"); return; }
+  const r = await fetch("/api/print/image", { method:"POST", body:imageForm() });
+  done(r, await r.json().catch(()=>({})));
+});
+$("#print-banner").onclick = () => withBusy($("#print-banner"), async () => {
+  if(!$("#ban-text").value.trim()){ toast("Type a headline","bad"); return; }
+  const [r,j] = await postJSON("/api/print/banner", { text:$("#ban-text").value }); done(r,j);
+});
+$("#print-checklist").onclick = () => withBusy($("#print-checklist"), async () => {
+  if(!$("#cl-items").value.trim()){ toast("Add some items","bad"); return; }
+  const [r,j] = await postJSON("/api/print/checklist", { title:$("#cl-title").value, items:$("#cl-items").value }); done(r,j);
 });
 
 renderTextPreview();

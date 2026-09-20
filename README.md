@@ -9,9 +9,18 @@ network opens it in a browser and prints.
 ## Features
 - **Text** — title + body, live-wrapped at the printer's real 48 columns, align & size.
 - **Image** — drag/drop a photo; auto-fits the 576-dot width in portrait or landscape,
-  with Floyd–Steinberg **dithering** (photos) or a **threshold** slider (line art).
+  with a choice of renderer:
+  - **Floyd–Steinberg** dither (default, for photos)
+  - **Atkinson** dither — sparser dots, cleaner whites; best on thermal paper
+  - **Ordered (Bayer)** dither — stable retro halftone, never smears
+  - **Threshold** — hard black/white for line art (with slider)
+  - **Edge trace (Sobel)** — coloring-book outline; ink-light (sensitivity slider)
+  - **Halftone dots** — newspaper-style dot screen (dot-size slider)
 - **Polaroid mode** 📸 — frames the photo with a handwritten caption (bundled Patrick
-  Hand font). The little gimmick, done reliably: it's just image compositing.
+  Hand font). Reliable, because it's just image compositing.
+- **Banner** 🔠 — one or more lines of huge bold display type (bundled Anton font),
+  auto-sized to fill the paper width.
+- **Checklist** ☑️ — a title plus items, each with an empty ☐ box to tick by hand.
 - **Live WYSIWYG preview** — the server runs the *exact* print pipeline and streams the
   1-bit result back, so what you see is bit-for-bit what the thermal head prints.
 - **Online/offline indicator** for the printer.
