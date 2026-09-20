@@ -1,0 +1,21 @@
+# Prntr — BUILD-ON-DEVICE variant.
+# Use with Portainer > Stacks > Add stack > Repository (NOT the web editor):
+#   Repository URL:            https://github.com/thhe-stack/Prntr
+#   Repository reference:      refs/heads/main
+#   Compose path:              docker-compose.build.yml
+# Portainer clones the repo and builds the image on the ThinkSmart from the Dockerfile.
+# No GHCR, nothing to make public.
+services:
+  prntr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: prntr:local
+    container_name: prntr
+    restart: unless-stopped
+    ports:
+      - "8080:8080"                       # http://<thinksmart-ip>:8080
+    environment:
+      PRINTER_HOST: "192.168.1.73"        # the TM-m30II's reserved IP
+      PRINTER_PORT: "9100"
+      PRINT_WIDTH:  "576"                 # 80mm @ 203dpi = 576 dots (leave as-is for m30II)
