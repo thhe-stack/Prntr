@@ -5,7 +5,7 @@
       "name": "prntr",
       "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["app.py"],
-      "port": 8080
+      "port": 7666
     }
   ]
 }

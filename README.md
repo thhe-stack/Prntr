@@ -31,14 +31,14 @@ network opens it in a browser and prints.
 | `PRINTER_HOST` | `192.168.1.73` | the TM-m30II's IP (reserve it in your router!) |
 | `PRINTER_PORT` | `9100` | raw ESC/POS port |
 | `PRINT_WIDTH`  | `576` | printable dots — leave at 576 for the m30II |
-| `APP_PORT`     | `8080` | web UI port |
+| `APP_PORT`     | `7666` | web UI port |
 
 ## Run locally (dev)
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 PRINTER_HOST=192.168.1.73 python app.py
-# open http://localhost:8080
+# open http://localhost:7666
 ```
 
 ## Deploy on the ThinkSmart (Portainer + GitHub image)
@@ -52,11 +52,11 @@ PRINTER_HOST=192.168.1.73 python app.py
    - set `image:` to `ghcr.io/thhe-stack/prntr:latest`
    - set `PRINTER_HOST` to your printer's reserved IP
    - **Deploy**.
-4. Open **http://<thinksmart-ip>:8080** from any device on the LAN.
+4. Open **http://<thinksmart-ip>:7666** from any device on the LAN.
 
 ## Notes
 - **No authentication by design** — it's meant for a trusted LAN. Don't expose port
-  8080 to the internet.
+  7666 to the internet.
 - The printer needs a **stable IP**. Reserve `192.168.1.73` (or whatever it is) as a
   DHCP reservation in your router so the address never drifts.
 - Fonts: Patrick Hand is bundled under the SIL Open Font License (`assets/PatrickHand-OFL.txt`).
