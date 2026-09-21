@@ -6,9 +6,10 @@ services:
     container_name: prntr
     restart: unless-stopped
     ports:
-      - "8080:8080"                        # http://<thinksmart-ip>:8080
+      - "7666:7666"                        # http://<thinksmart-ip>:7666
     environment:
       PRINTER_HOST: "192.168.1.73"         # the TM-m30II's reserved IP
       PRINTER_PORT: "9100"
+      APP_PORT:     "7666"
       PRINT_WIDTH:  "576"                  # 80mm @ 203dpi = 576 dots (do not change for m30II)
       # TOP_MARGIN_DOTS: "40"   # blank top feed (~5mm) so the title is not clipped; raise if it still cuts
