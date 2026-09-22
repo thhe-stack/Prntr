@@ -25,6 +25,13 @@ DOTS_PER_MM = 8                                            # 203 dpi ≈ 8 dots/
 # Blank leading feed so the cutter's non-printable top zone doesn't clip line 1.
 TOP_MARGIN_DOTS = int(os.environ.get("TOP_MARGIN_DOTS", "40"))  # ≈ 5 mm
 
+# Version shown in the UI. GIT_SHA/BUILD_DATE are injected at image build time
+# (see Dockerfile ARGs + the Actions workflow) so the badge proves which build is
+# actually running — a static version string can't tell you if a redeploy took.
+APP_VERSION = "1.1.0"
+GIT_SHA = (os.environ.get("GIT_SHA") or "")[:7] or "dev"
+BUILD_DATE = os.environ.get("BUILD_DATE") or "local"
+
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 FONT_PATH = os.path.join(_ASSETS, "PatrickHand-Regular.ttf")   # handwritten (captions, checklist)
 BANNER_FONT_PATH = os.path.join(_ASSETS, "Anton-Regular.ttf")  # bold display (banners, headings)
@@ -474,14 +481,16 @@ def poster_params(form):
 @app.route("/")
 def index():
     return render_template("index.html", cols=COLS, width=PRINT_WIDTH,
-                           host=PRINTER_HOST, port=PRINTER_PORT)
+                           host=PRINTER_HOST, port=PRINTER_PORT,
+                           version=APP_VERSION, sha=GIT_SHA, build_date=BUILD_DATE)
 
 
 @app.route("/api/status")
 def status():
     st = printer_status()
     return jsonify(host=PRINTER_HOST, port=PRINTER_PORT,
-                   width=PRINT_WIDTH, cols=COLS, **st)
+                   width=PRINT_WIDTH, cols=COLS,
+                   version=APP_VERSION, sha=GIT_SHA, build_date=BUILD_DATE, **st)
 
 
 @app.route("/api/preview/image", methods=["POST"])

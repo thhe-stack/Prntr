@@ -29,6 +29,8 @@
   .status{margin-left:auto; display:flex; align-items:center; gap:10px; color:var(--mut); font-size:13px}
   .dot{width:10px;height:10px;border-radius:50%;background:var(--mut)}
   .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)}
+  .ver{font-size:11px; color:var(--mut); border:1px solid var(--line); padding:2px 8px;
+       border-radius:999px; font-family:"SFMono-Regular",ui-monospace,Menlo,monospace; cursor:default}
   .pill{font-size:12px; font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid var(--line)}
   .pill.ok{color:var(--ok); border-color:rgba(57,217,138,.4)}
   .pill.low{color:var(--warn); border-color:rgba(255,176,32,.45)}
@@ -91,6 +93,7 @@
 <div class="app">
   <header>
     <div class="logo">Prn<span>t</span>r</div>
+    <span class="ver" title="version {{ version }} · commit {{ sha }} · built {{ build_date }}">v{{ version }} · {{ sha }}</span>
     <div class="status">
       <span id="paper" class="pill hide"></span>
       <span id="dot" class="dot"></span><span id="stat">checking…</span>

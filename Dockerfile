@@ -6,6 +6,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
+# Build metadata, injected by CI so the UI badge proves which build is running.
+ARG GIT_SHA=""
+ARG BUILD_DATE=""
+ENV GIT_SHA=$GIT_SHA \
+    BUILD_DATE=$BUILD_DATE
 ENV PRINTER_HOST=192.168.1.73 \
     PRINTER_PORT=9100 \
     PRINT_WIDTH=576 \

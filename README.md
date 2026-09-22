@@ -62,6 +62,11 @@ PRINTER_HOST=192.168.1.73 python app.py
 4. Open **http://<thinksmart-ip>:7666** from any device on the LAN.
 
 ## Notes
+- **Version badge** — the header shows `v<version> · <commit>`. `GIT_SHA` and
+  `BUILD_DATE` are baked into the image at build time by the Actions workflow, so the
+  badge tells you *which build is actually running* — handy for confirming a redeploy
+  really picked up the new image. Running locally it shows `dev`. Bump `APP_VERSION`
+  in `app.py` for releases.
 - **No authentication by design** — it's meant for a trusted LAN. Don't expose port
   7666 to the internet.
 - The printer needs a **stable IP**. Reserve `192.168.1.73` (or whatever it is) as a
