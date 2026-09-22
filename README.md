@@ -21,9 +21,16 @@ network opens it in a browser and prints.
 - **Banner** 🔠 — one or more lines of huge bold display type (bundled Anton font),
   auto-sized to fill the paper width.
 - **Checklist** ☑️ — a title plus items, each with an empty ☐ box to tick by hand.
+- **Poster / rasterbation** 🧩 — tile an image across *N* paper-width strips you tape
+  together (2–6 strips ≈ 13–40 cm wide). Artwork sits **flush left** with a blank
+  **glue gap** on the right of each strip to lap the next one over. The whole poster
+  is dithered *before* slicing, so the dot pattern is continuous and the joins are
+  seamless. Halftone is the default here — big dots read well from a distance.
+- **Printer status** — live online/offline plus **paper OK / low / out**, cover-open
+  and error detection via ESC/POS real-time status (`DLE EOT`). Thermal rolls have no
+  length encoder, so this is sensor-based: it reports "low" (near-end), not a %.
 - **Live WYSIWYG preview** — the server runs the *exact* print pipeline and streams the
   1-bit result back, so what you see is bit-for-bit what the thermal head prints.
-- **Online/offline indicator** for the printer.
 
 ## Configuration (env vars)
 | var | default | meaning |

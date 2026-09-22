@@ -8,7 +8,7 @@
   :root{
     --bg:#0f1115; --card:#171a21; --card2:#1e222b; --line:#2a2f3a;
     --ink:#e8eaed; --mut:#9aa3b2; --accent:#ff6a3d;
-    --ok:#39d98a; --bad:#ff5d5d; --paper:#fbfbf7;
+    --ok:#39d98a; --warn:#ffb020; --bad:#ff5d5d; --paper:#fbfbf7;
     --radius:16px; --shadow:0 10px 30px rgba(0,0,0,.35);
   }
   @media (prefers-color-scheme:light){
@@ -23,18 +23,22 @@
     padding:16px; display:flex; justify-content:center;
   }
   .app{width:100%; max-width:920px}
-  header{display:flex; align-items:center; gap:12px; margin:6px 2px 18px}
+  header{display:flex; align-items:center; gap:12px; margin:6px 2px 18px; flex-wrap:wrap}
   .logo{font-weight:800; font-size:22px; letter-spacing:.5px}
   .logo span{color:var(--accent)}
-  .status{margin-left:auto; display:flex; align-items:center; gap:8px; color:var(--mut); font-size:13px}
+  .status{margin-left:auto; display:flex; align-items:center; gap:10px; color:var(--mut); font-size:13px}
   .dot{width:10px;height:10px;border-radius:50%;background:var(--mut)}
   .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)}
+  .pill{font-size:12px; font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid var(--line)}
+  .pill.ok{color:var(--ok); border-color:rgba(57,217,138,.4)}
+  .pill.low{color:var(--warn); border-color:rgba(255,176,32,.45)}
+  .pill.out{color:var(--bad); border-color:rgba(255,93,93,.45)}
   .grid{display:grid; grid-template-columns:1fr 340px; gap:16px}
   @media (max-width:760px){ .grid{grid-template-columns:1fr} }
   .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
   .pad{padding:18px}
-  .tabs{display:flex; gap:4px; padding:6px; background:var(--card2); border-radius:12px; margin-bottom:16px}
-  .tab{flex:1; text-align:center; padding:10px 4px; border-radius:9px; cursor:pointer; color:var(--mut); font-weight:600; font-size:14px}
+  .tabs{display:flex; flex-wrap:wrap; gap:4px; padding:6px; background:var(--card2); border-radius:12px; margin-bottom:16px}
+  .tab{flex:1 1 auto; min-width:76px; text-align:center; padding:10px 4px; border-radius:9px; cursor:pointer; color:var(--mut); font-weight:600; font-size:14px}
   .tab.active{background:var(--card); color:var(--ink); box-shadow:var(--shadow)}
   label{display:block; font-size:13px; color:var(--mut); margin:14px 0 6px; font-weight:600}
   textarea,input[type=text],select{
@@ -87,7 +91,10 @@
 <div class="app">
   <header>
     <div class="logo">Prn<span>t</span>r</div>
-    <div class="status"><span id="dot" class="dot"></span><span id="stat">checking…</span></div>
+    <div class="status">
+      <span id="paper" class="pill hide"></span>
+      <span id="dot" class="dot"></span><span id="stat">checking…</span>
+    </div>
   </header>
 
   <div class="grid">
@@ -97,6 +104,7 @@
         <div class="tab" data-tab="image">🖼️ Image</div>
         <div class="tab" data-tab="banner">🔠 Banner</div>
         <div class="tab" data-tab="checklist">☑️ List</div>
+        <div class="tab" data-tab="poster">🧩 Poster</div>
       </div>
 
       <!-- TEXT -->
@@ -165,6 +173,48 @@
         <textarea id="cl-items" placeholder="Passport&#10;Phone charger&#10;Sunscreen"></textarea>
         <button class="btn" id="print-checklist">Print checklist</button>
       </section>
+
+      <!-- POSTER -->
+      <section id="tab-poster" class="hide">
+        <div class="drop" id="p-drop">
+          <div id="p-drop-label">Tap to choose an image, or drop one here</div>
+          <input type="file" id="p-file" accept="image/*" class="hide">
+        </div>
+        <div class="row">
+          <div><label>Strips wide <span class="muted" id="p-width-hint"></span></label>
+            <select id="p-strips">
+              <option value="2">2 strips</option>
+              <option value="3" selected>3 strips</option>
+              <option value="4">4 strips</option>
+              <option value="5">5 strips</option>
+              <option value="6">6 strips</option>
+            </select></div>
+          <div><label>Rendering</label>
+            <select id="p-method">
+              <option value="halftone" selected>Halftone dots</option>
+              <option value="atkinson">Dither — Atkinson</option>
+              <option value="ordered">Dither — Ordered</option>
+              <option value="floyd">Dither — Floyd</option>
+              <option value="threshold">Threshold</option>
+              <option value="edge">Edge trace</option>
+            </select></div>
+        </div>
+        <label>Glue gap <span class="muted"><span id="p-gap-val">5</span> mm blank on the right of each strip</span></label>
+        <input type="range" id="p-gap" min="2" max="12" value="5" style="width:100%">
+        <div id="p-thr-wrap" class="hide">
+          <label><span id="p-thr-label">Threshold</span> <span class="muted" id="p-thr-val">128</span></label>
+          <input type="range" id="p-thr" min="40" max="220" value="128" style="width:100%">
+        </div>
+        <div id="p-cell-wrap">
+          <label>Dot size <span class="muted" id="p-cell-val">7</span></label>
+          <input type="range" id="p-cell" min="4" max="16" value="7" style="width:100%">
+        </div>
+        <label class="switch"><input type="checkbox" id="p-rotate"><span class="track"><span class="knob"></span></span>
+          <span>Rotate 90° <span class="muted">— for a portrait source</span></span></label>
+        <label class="switch"><input type="checkbox" id="p-label" checked><span class="track"><span class="knob"></span></span>
+          <span>Label each strip <span class="muted">— prints “strip 2/4” above the art</span></span></label>
+        <button class="btn" id="print-poster" disabled>Print poster strips</button>
+      </section>
     </div>
 
     <div class="card pad previewCard">
@@ -180,50 +230,65 @@
 const COLS = {{ cols }};
 const $ = s => document.querySelector(s);
 const preview = $("#preview"), lenEl = $("#len");
-let curTab = "text", imgFile = null, prevTimer = null, prevURL = null;
+let curTab = "text", imgFile = null, posterFile = null, prevTimer = null, prevURL = null;
 
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   t.classList.add("active");
   curTab = t.dataset.tab;
-  ["text","image","banner","checklist"].forEach(n =>
+  ["text","image","banner","checklist","poster"].forEach(n =>
     $("#tab-"+n).classList.toggle("hide", curTab !== n));
   renderPreview();
 });
 
 function toast(msg, kind){
   const el = $("#toast"); el.textContent = msg; el.className = "toast show " + (kind||"");
-  setTimeout(() => el.className = "toast", 2200);
+  setTimeout(() => el.className = "toast", 2600);
 }
 
+// ---------- status + paper ----------
+const PAPER_TEXT = { ok:"Paper OK", low:"Paper low", out:"Out of paper" };
 async function poll(){
   try{
     const s = await (await fetch("/api/status")).json();
     $("#dot").className = "dot " + (s.online ? "ok" : "bad");
-    $("#stat").textContent = s.online ? `TM-m30II · ${s.host}` : `offline · ${s.host}`;
+    let txt = s.online ? `TM-m30II · ${s.host}` : `offline · ${s.host}`;
+    if(s.cover_open) txt = "cover open";
+    else if(s.error) txt = "printer error";
+    $("#stat").textContent = txt;
+    const pill = $("#paper");
+    if(s.online && PAPER_TEXT[s.paper]){
+      pill.textContent = PAPER_TEXT[s.paper];
+      pill.className = "pill " + s.paper;
+    } else { pill.className = "pill hide"; }
   }catch{ $("#dot").className = "dot bad"; $("#stat").textContent = "app error"; }
 }
 poll(); setInterval(poll, 5000);
 
 // ---------- shared preview helpers ----------
-function showText(node){ preview.className = "paper txt"; preview.replaceChildren(node); lenEl.textContent = ""; }
-function showPng(blob, mm){
+function showText(msg){
+  const d = document.createElement("div"); d.textContent = msg;
+  preview.className = "paper txt"; preview.replaceChildren(d); lenEl.textContent = "";
+}
+function showPng(blob, info){
   if(prevURL) URL.revokeObjectURL(prevURL);
   prevURL = URL.createObjectURL(blob);
   preview.className = "paper"; preview.replaceChildren();
   const im = document.createElement("img"); im.src = prevURL; im.alt = "print preview";
   preview.appendChild(im);
-  lenEl.textContent = mm ? `≈ ${mm} mm of paper` : "";
+  lenEl.textContent = info || "";
 }
-async function serverPreview(url, opts){
+async function serverPreview(url, opts, infoFn){
   try{
     const r = await fetch(url, opts);
     if(!r.ok) throw new Error();
-    showPng(await r.blob(), r.headers.get("X-Print-Length-Mm"));
-  }catch{ const d=document.createElement("div"); d.textContent="Couldn't render that."; showText(d); }
+    const blob = await r.blob();
+    const h = r.headers;
+    showPng(blob, infoFn ? infoFn(h) : (h.get("X-Print-Length-Mm") ? `≈ ${h.get("X-Print-Length-Mm")} mm of paper` : ""));
+  }catch{ showText("Couldn't render that."); }
 }
 
-// ---------- TEXT (client-side wrap) ----------
+// ---------- TEXT ----------
 function wrapMono(str, cols){
   const out = [];
   for(const para of str.split("\n")){
@@ -266,26 +331,57 @@ function imageForm(){
   return fd;
 }
 function renderImagePreview(){
-  if(!imgFile){ const d=document.createElement("div"); d.textContent="Choose a photo to see how it'll print."; showText(d); return; }
+  if(!imgFile) return showText("Choose a photo to see how it'll print.");
   serverPreview("/api/preview/image", { method:"POST", body:imageForm() });
+}
+
+// ---------- POSTER ----------
+function posterForm(){
+  const fd = new FormData();
+  fd.append("image", posterFile);
+  fd.append("strips", $("#p-strips").value);
+  fd.append("gap_mm", $("#p-gap").value);
+  fd.append("method", $("#p-method").value);
+  fd.append("threshold", $("#p-thr").value);
+  fd.append("cell", $("#p-cell").value);
+  fd.append("rotate", $("#p-rotate").checked ? "1" : "0");
+  fd.append("label", $("#p-label").checked ? "1" : "0");
+  return fd;
+}
+function posterInfo(h){
+  const n = h.get("X-Strips"), each = h.get("X-Print-Length-Mm"),
+        total = h.get("X-Total-Mm"), w = h.get("X-Poster-Width-Mm");
+  return `${n} strips · poster ${w} × ${each} mm · ${total} mm of paper total`;
+}
+function renderPosterPreview(){
+  if(!posterFile) return showText("Choose an image to tile into a poster.");
+  serverPreview("/api/preview/poster", { method:"POST", body:posterForm() }, posterInfo);
+}
+function updatePosterHint(){
+  const strips = parseInt($("#p-strips").value,10);
+  const gapmm = parseInt($("#p-gap").value,10);
+  const mm = Math.round(strips * (72 - gapmm));      // 72mm printable per strip
+  $("#p-width-hint").textContent = `≈ ${mm} mm wide`;
+  $("#p-gap-val").textContent = gapmm;
 }
 
 // ---------- BANNER / CHECKLIST ----------
 function renderBannerPreview(){
-  if(!$("#ban-text").value.trim()){ const d=document.createElement("div"); d.textContent="Type a headline."; showText(d); return; }
+  if(!$("#ban-text").value.trim()) return showText("Type a headline.");
   serverPreview("/api/preview/banner", { method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ text:$("#ban-text").value }) });
 }
 function renderChecklistPreview(){
-  if(!$("#cl-items").value.trim() && !$("#cl-title").value.trim()){ const d=document.createElement("div"); d.textContent="Add some items."; showText(d); return; }
+  if(!$("#cl-items").value.trim() && !$("#cl-title").value.trim()) return showText("Add some items.");
   serverPreview("/api/preview/checklist", { method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ title:$("#cl-title").value, items:$("#cl-items").value }) });
 }
 
 function renderPreview(){
   clearTimeout(prevTimer);
-  const fn = { text:renderTextPreview, image:renderImagePreview, banner:renderBannerPreview, checklist:renderChecklistPreview }[curTab];
-  prevTimer = setTimeout(fn, 200);
+  const fn = { text:renderTextPreview, image:renderImagePreview, banner:renderBannerPreview,
+               checklist:renderChecklistPreview, poster:renderPosterPreview }[curTab];
+  prevTimer = setTimeout(fn, 220);
 }
 
 // ---------- input wiring ----------
@@ -293,18 +389,21 @@ function renderPreview(){
 $("#ban-text").addEventListener("input", renderPreview);
 ["#cl-title","#cl-items"].forEach(s => $(s).addEventListener("input", renderPreview));
 
-const drop = $("#drop"), fileInput = $("#file");
-drop.onclick = () => fileInput.click();
-["dragenter","dragover"].forEach(e => drop.addEventListener(e, ev=>{ev.preventDefault();drop.classList.add("hover");}));
-["dragleave","drop"].forEach(e => drop.addEventListener(e, ev=>{ev.preventDefault();drop.classList.remove("hover");}));
-drop.addEventListener("drop", ev => { if(ev.dataTransfer.files[0]) setFile(ev.dataTransfer.files[0]); });
-fileInput.onchange = () => { if(fileInput.files[0]) setFile(fileInput.files[0]); };
-function setFile(f){ imgFile = f; $("#drop-label").textContent = "📷 " + f.name; $("#print-image").disabled = false; renderPreview(); }
+function wireDrop(dropSel, inputSel, labelSel, onFile){
+  const drop = $(dropSel), input = $(inputSel);
+  drop.onclick = () => input.click();
+  ["dragenter","dragover"].forEach(e => drop.addEventListener(e, ev=>{ev.preventDefault();drop.classList.add("hover");}));
+  ["dragleave","drop"].forEach(e => drop.addEventListener(e, ev=>{ev.preventDefault();drop.classList.remove("hover");}));
+  drop.addEventListener("drop", ev => { if(ev.dataTransfer.files[0]) pick(ev.dataTransfer.files[0]); });
+  input.onchange = () => { if(input.files[0]) pick(input.files[0]); };
+  function pick(f){ $(labelSel).textContent = "📷 " + f.name; onFile(f); renderPreview(); }
+}
+wireDrop("#drop", "#file", "#drop-label", f => { imgFile = f; $("#print-image").disabled = false; });
+wireDrop("#p-drop", "#p-file", "#p-drop-label", f => { posterFile = f; $("#print-poster").disabled = false; });
 
 $("#i-orient").addEventListener("change", renderPreview);
 $("#i-method").addEventListener("change", () => {
-  const m = $("#i-method").value;
-  const showThr = (m === "threshold" || m === "edge");
+  const m = $("#i-method").value, showThr = (m === "threshold" || m === "edge");
   $("#thr-wrap").classList.toggle("hide", !showThr);
   $("#thr-label").textContent = (m === "edge") ? "Edge sensitivity" : "Threshold";
   $("#cell-wrap").classList.toggle("hide", m !== "halftone");
@@ -314,6 +413,19 @@ $("#i-thr").addEventListener("input", () => { $("#thr-val").textContent = $("#i-
 $("#i-cell").addEventListener("input", () => { $("#cell-val").textContent = $("#i-cell").value; renderPreview(); });
 $("#i-pola").addEventListener("change", () => { $("#cap-wrap").classList.toggle("hide", !$("#i-pola").checked); renderPreview(); });
 $("#i-cap").addEventListener("input", renderPreview);
+
+$("#p-method").addEventListener("change", () => {
+  const m = $("#p-method").value, showThr = (m === "threshold" || m === "edge");
+  $("#p-thr-wrap").classList.toggle("hide", !showThr);
+  $("#p-thr-label").textContent = (m === "edge") ? "Edge sensitivity" : "Threshold";
+  $("#p-cell-wrap").classList.toggle("hide", m !== "halftone");
+  renderPreview();
+});
+$("#p-strips").addEventListener("change", () => { updatePosterHint(); renderPreview(); });
+$("#p-gap").addEventListener("input", () => { updatePosterHint(); renderPreview(); });
+$("#p-thr").addEventListener("input", () => { $("#p-thr-val").textContent = $("#p-thr").value; renderPreview(); });
+$("#p-cell").addEventListener("input", () => { $("#p-cell-val").textContent = $("#p-cell").value; renderPreview(); });
+$("#p-rotate").addEventListener("change", renderPreview);
 
 // ---------- print actions ----------
 async function withBusy(btn, fn){ btn.classList.add("busy"); btn.disabled = true; try{ await fn(); } finally { btn.classList.remove("busy"); btn.disabled = false; } }
@@ -338,7 +450,14 @@ $("#print-checklist").onclick = () => withBusy($("#print-checklist"), async () =
   if(!$("#cl-items").value.trim()){ toast("Add some items","bad"); return; }
   const [r,j] = await postJSON("/api/print/checklist", { title:$("#cl-title").value, items:$("#cl-items").value }); done(r,j);
 });
+$("#print-poster").onclick = () => withBusy($("#print-poster"), async () => {
+  if(!posterFile){ toast("Choose an image first","bad"); return; }
+  const r = await fetch("/api/print/poster", { method:"POST", body:posterForm() });
+  const j = await r.json().catch(()=>({}));
+  toast(r.ok ? `Printed ${j.strips} strips ✓ (${j.total_mm}mm total)` : ("Failed: "+(j.error||"error")), r.ok?"ok":"bad");
+});
 
+updatePosterHint();
 renderTextPreview();
 </script>
 </body>

@@ -9,6 +9,7 @@ import io
 import os
 import socket
 import textwrap
+import threading
 
 import numpy as np
 from flask import Flask, request, jsonify, send_file, render_template
@@ -48,12 +49,56 @@ def load_banner_font(size):
         return load_font(size)
 
 
-def printer_online():
+# Port 9100 generally accepts one connection at a time, so status polls must never
+# grab the socket while a print is in flight.
+_PRINTER_LOCK = threading.Lock()
+_LAST_STATUS = {"online": False, "paper": "unknown", "cover_open": False, "error": False}
+
+
+def printer_status():
+    """Real-time ESC/POS status: online, paper (ok/low/out), cover, error.
+
+    Thermal rolls have no length encoder — the printer only has optical sensors,
+    so this reports 'low' (near-end) and 'out', never a percentage.
+    """
+    global _LAST_STATUS
+    if not _PRINTER_LOCK.acquire(timeout=0.25):
+        return dict(_LAST_STATUS, busy=True)        # mid-print: report last known
+    st = {"online": False, "paper": "unknown", "cover_open": False, "error": False}
     try:
-        socket.create_connection((PRINTER_HOST, PRINTER_PORT), timeout=2).close()
-        return True
+        s = socket.create_connection((PRINTER_HOST, PRINTER_PORT), timeout=2)
+        s.settimeout(1.5)
+
+        def ask(cmd):
+            s.sendall(cmd)
+            try:
+                return s.recv(1)
+            except socket.timeout:
+                return b""
+
+        st1 = ask(b"\x10\x04\x01")      # printer status
+        st2 = ask(b"\x10\x04\x02")      # offline status (cover, errors)
+        st4 = ask(b"\x10\x04\x04")      # paper sensors
+        s.close()
+        st["online"] = bool(st1 or st2 or st4)
+        if st4:
+            b = st4[0]
+            if (b & 0x60) == 0x60:
+                st["paper"] = "out"
+            elif (b & 0x0C) == 0x0C:
+                st["paper"] = "low"
+            else:
+                st["paper"] = "ok"
+        if st2:
+            b = st2[0]
+            st["cover_open"] = bool(b & 0x04)
+            st["error"] = bool(b & 0x40)
     except OSError:
-        return False
+        pass
+    finally:
+        _PRINTER_LOCK.release()
+    _LAST_STATUS = st
+    return dict(st, busy=False)
 
 
 def connect():
@@ -77,13 +122,26 @@ def feed_top(p):
             p.text("\n")
 
 
+def print_rasters(images, labels=None):
+    """Print one or more finished 1-bit images, each with a top margin and cut.
+
+    The whole run holds the printer lock so a status poll can't steal the socket
+    between strips of a poster.
+    """
+    with _PRINTER_LOCK:
+        for i, bw in enumerate(images):
+            p = connect()
+            feed_top(p)
+            if labels and labels[i]:
+                p.set(align="left", width=1, height=1)
+                p.text(labels[i] + "\n")
+            p.image(bw, impl="bitImageRaster")
+            p.cut(mode="PART")
+            p.close()
+
+
 def print_raster(bw):
-    """Send a finished 1-bit image to the printer with a top margin and cut."""
-    p = connect()
-    feed_top(p)
-    p.image(bw, impl="bitImageRaster")
-    p.cut(mode="PART")
-    p.close()
+    print_rasters([bw])
 
 
 def png_response(bw):
@@ -358,6 +416,60 @@ def build_checklist(title, items):
     return canvas.point(lambda v: 255 if v >= 128 else 0).convert("1")
 
 
+# ---------------------------------------------------------------- poster (rasterbation)
+def build_poster(img, strips, gap_dots, method, threshold, cell, rotate=False):
+    """Slice an image into N paper-width strips you tape together into a poster.
+
+    Each strip carries its artwork flush LEFT, leaving `gap_dots` of blank paper
+    on the right as the glue tab that the next strip laps over — so the artwork
+    stays continuous while the paper overlaps.
+
+    The whole poster is dithered *before* slicing, otherwise error diffusion would
+    restart at every strip edge and leave visible seams at the joins.
+    """
+    strips = max(2, min(8, int(strips)))
+    gap = max(0, min(160, int(gap_dots)))
+    content_w = PRINT_WIDTH - gap
+    total_w = strips * content_w
+
+    im = ImageOps.exif_transpose(flatten(img))
+    if rotate:
+        im = im.rotate(90, expand=True)
+    h = max(1, round(im.height * total_w / im.width))
+    im = im.resize((total_w, h), Image.LANCZOS)
+    poster = reduce_1bit(ImageOps.grayscale(im), method, threshold, cell)
+
+    out = []
+    for i in range(strips):
+        chunk = poster.crop((i * content_w, 0, (i + 1) * content_w, h))
+        canvas = Image.new("1", (PRINT_WIDTH, h), 1)   # 1 = white
+        canvas.paste(chunk, (0, 0))                     # flush left; gap stays blank
+        out.append(canvas)
+    return out, poster, content_w
+
+
+def poster_preview(poster, strips, content_w):
+    """The assembled poster, with dashed lines marking where strips join."""
+    pv = poster.convert("L")
+    d = ImageDraw.Draw(pv)
+    for i in range(1, strips):
+        x = i * content_w
+        for y in range(0, pv.height, 14):
+            d.line([(x, y), (x, min(y + 7, pv.height))], fill=140, width=2)
+    return pv
+
+
+def poster_params(form):
+    return dict(
+        strips=int(form.get("strips", "3")),
+        gap_dots=round(float(form.get("gap_mm", "5")) * DOTS_PER_MM),
+        method=form.get("method", "halftone"),
+        threshold=int(form.get("threshold", "128")),
+        cell=int(form.get("cell", "7")),
+        rotate=form.get("rotate", "0") == "1",
+    )
+
+
 # ---------------------------------------------------------------- routes
 @app.route("/")
 def index():
@@ -367,8 +479,9 @@ def index():
 
 @app.route("/api/status")
 def status():
-    return jsonify(online=printer_online(), host=PRINTER_HOST, port=PRINTER_PORT,
-                   width=PRINT_WIDTH, cols=COLS)
+    st = printer_status()
+    return jsonify(host=PRINTER_HOST, port=PRINTER_PORT,
+                   width=PRINT_WIDTH, cols=COLS, **st)
 
 
 @app.route("/api/preview/image", methods=["POST"])
@@ -383,6 +496,39 @@ def print_image():
         print_raster(bw)
         return jsonify(ok=True, length_mm=round(bw.height / DOTS_PER_MM))
     except Exception as e:  # noqa: BLE001 — surface any failure to the UI
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route("/api/preview/poster", methods=["POST"])
+def preview_poster():
+    prm = poster_params(request.form)
+    imgs, poster, content_w = build_poster(Image.open(request.files["image"].stream), **prm)
+    pv = poster_preview(poster, len(imgs), content_w)
+    buf = io.BytesIO()
+    pv.save(buf, "PNG")
+    buf.seek(0)
+    resp = send_file(buf, mimetype="image/png")
+    per = round(poster.height / DOTS_PER_MM)
+    resp.headers["X-Print-Length-Mm"] = str(per)
+    resp.headers["X-Strips"] = str(len(imgs))
+    resp.headers["X-Total-Mm"] = str(per * len(imgs))
+    resp.headers["X-Poster-Width-Mm"] = str(round(len(imgs) * content_w / DOTS_PER_MM))
+    return resp
+
+
+@app.route("/api/print/poster", methods=["POST"])
+def print_poster():
+    try:
+        prm = poster_params(request.form)
+        label = request.form.get("label", "1") == "1"
+        imgs, poster, content_w = build_poster(Image.open(request.files["image"].stream), **prm)
+        n = len(imgs)
+        labels = [f"strip {i}/{n}  (glue tab on right)" for i in range(1, n + 1)] if label else None
+        print_rasters(imgs, labels)
+        per = round(poster.height / DOTS_PER_MM)
+        return jsonify(ok=True, strips=n, length_mm=per, total_mm=per * n,
+                       poster_width_mm=round(n * content_w / DOTS_PER_MM))
+    except Exception as e:  # noqa: BLE001
         return jsonify(ok=False, error=str(e)), 500
 
 
@@ -426,26 +572,27 @@ def print_text():
     size = 2 if str(data.get("size", "1")) == "2" else 1
     title = (data.get("title") or "").strip()
     try:
-        p = connect()
-        feed_top(p)
-        if title:
-            p.set(align="center", bold=True, width=2, height=2)
-            for ln in textwrap.wrap(title, width=max(1, COLS // 2)) or [""]:
-                p.text(ln + "\n")
-            p.set(align="left", bold=False, width=1, height=1)
-            p.text("\n")
-        p.set(align=align, width=size, height=size)
-        cols = max(1, COLS // size)
-        for para in text.split("\n"):
-            if not para.strip():
+        with _PRINTER_LOCK:
+            p = connect()
+            feed_top(p)
+            if title:
+                p.set(align="center", bold=True, width=2, height=2)
+                for ln in textwrap.wrap(title, width=max(1, COLS // 2)) or [""]:
+                    p.text(ln + "\n")
+                p.set(align="left", bold=False, width=1, height=1)
                 p.text("\n")
-                continue
-            for ln in textwrap.wrap(para, width=cols, break_long_words=True,
-                                    replace_whitespace=False, drop_whitespace=True):
-                p.text(ln + "\n")
-        p.set(align="left", width=1, height=1)
-        p.cut(mode="PART")
-        p.close()
+            p.set(align=align, width=size, height=size)
+            cols = max(1, COLS // size)
+            for para in text.split("\n"):
+                if not para.strip():
+                    p.text("\n")
+                    continue
+                for ln in textwrap.wrap(para, width=cols, break_long_words=True,
+                                        replace_whitespace=False, drop_whitespace=True):
+                    p.text(ln + "\n")
+            p.set(align="left", width=1, height=1)
+            p.cut(mode="PART")
+            p.close()
         return jsonify(ok=True)
     except Exception as e:  # noqa: BLE001
         return jsonify(ok=False, error=str(e)), 500
