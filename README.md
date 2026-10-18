@@ -32,6 +32,30 @@ network opens it in a browser and prints.
 - **Live WYSIWYG preview** — the server runs the *exact* print pipeline and streams the
   1-bit result back, so what you see is bit-for-bit what the thermal head prints.
 
+## Printing from other apps (raster API)
+The standard way for another app to print is to **render the page itself** as a PNG
+exactly 576 px wide, then hand it to Prntr. Prntr only drives the printer: it holds the
+socket lock, adds the top margin and cuts. It never resizes, rotates or re-lays-out a
+raster page, so the app's own preview is exactly what prints.
+
+```bash
+curl -s http://<prntr-host>:7666/api/status          # online? paper? "raster" in capabilities?
+curl -s -F image=@page1.png -F image=@page2.png \
+     -F cut=end -F source=myapp -F job=receipt \
+     http://<prntr-host>:7666/api/print/raster
+# {"ok": true, "pages": 2, "length_mm": 52}
+```
+
+| field | meaning |
+|-------|---------|
+| `image` | one or more PNGs, each **exactly 576 px wide** (repeat the field for several pages) |
+| `cut` | `each` (default, cut between pages), `end` (one continuous receipt), `none` |
+| `source`, `job` | optional labels, written to the container log |
+
+Pixels darker than mid-grey print black. Send 1-bit art, or dither tones yourself first.
+A wrong width returns `400` with the reason. Sparvati is the reference client; the full
+contract is in the Obsidian vault (`System/Prntr Print Contract.md`).
+
 ## Configuration (env vars)
 | var | default | meaning |
 |-----|---------|---------|

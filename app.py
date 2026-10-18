@@ -28,7 +28,7 @@ TOP_MARGIN_DOTS = int(os.environ.get("TOP_MARGIN_DOTS", "40"))  # ≈ 5 mm
 # Version shown in the UI. GIT_SHA/BUILD_DATE are injected at image build time
 # (see Dockerfile ARGs + the Actions workflow) so the badge proves which build is
 # actually running — a static version string can't tell you if a redeploy took.
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 GIT_SHA = (os.environ.get("GIT_SHA") or "")[:7] or "dev"
 BUILD_DATE = os.environ.get("BUILD_DATE") or "local"
 
@@ -149,6 +149,37 @@ def print_rasters(images, labels=None):
 
 def print_raster(bw):
     print_rasters([bw])
+
+
+def print_job(images, cut="each"):
+    """Print client-rendered pages back to back: cut after each page, or once at the end.
+
+    Feeding all pages through one connection with a single cut gives one continuous
+    receipt — what an app wants when it splits a long document into several images.
+    """
+    with _PRINTER_LOCK:
+        p = connect()
+        feed_top(p)
+        for i, bw in enumerate(images):
+            p.image(bw, impl="bitImageRaster")
+            if cut == "each" and i < len(images) - 1:
+                p.cut(mode="PART")
+                feed_top(p)
+        if cut != "none":
+            p.cut(mode="PART")
+        p.close()
+
+
+def load_raster(file_storage):
+    """Read a client-rendered page as 1-bit, pixel for pixel — no resize, no rotation.
+
+    Anything darker than mid-grey prints black, so a 1-bit PNG round-trips exactly and a
+    greyscale one gets a plain threshold (apps should dither themselves if they want tone).
+    """
+    img = flatten(Image.open(file_storage.stream))
+    if img.width != PRINT_WIDTH:
+        raise ValueError(f"page is {img.width} px wide; it must be exactly {PRINT_WIDTH}")
+    return ImageOps.grayscale(img).point(lambda v: 255 if v >= 128 else 0).convert("1")
 
 
 def png_response(bw):
@@ -489,7 +520,8 @@ def index():
 def status():
     st = printer_status()
     return jsonify(host=PRINTER_HOST, port=PRINTER_PORT,
-                   width=PRINT_WIDTH, cols=COLS,
+                   width=PRINT_WIDTH, cols=COLS, dots_per_mm=DOTS_PER_MM,
+                   capabilities=["text", "checklist", "banner", "image", "poster", "raster"],
                    version=APP_VERSION, sha=GIT_SHA, build_date=BUILD_DATE, **st)
 
 
@@ -569,6 +601,40 @@ def print_checklist():
         bw = build_checklist(data.get("title", ""), data.get("items", ""))
         print_raster(bw)
         return jsonify(ok=True, length_mm=round(bw.height / DOTS_PER_MM))
+    except Exception as e:  # noqa: BLE001
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route("/api/print/raster", methods=["POST"])
+def print_raster_api():
+    """The standard way for other apps to print: send finished 576-dot-wide pages.
+
+    multipart/form-data:
+      image   one or more PNG files (repeat the field for several pages), each exactly
+              PRINT_WIDTH px wide; printed top to bottom with no resizing or rotation
+      cut     "each" (default: cut between pages), "end" (one continuous receipt), "none"
+      source  optional app name, e.g. "sparvati" — logged so jobs can be traced
+      job     optional job label, e.g. "shopping-list"
+    """
+    files = request.files.getlist("image")
+    if not files:
+        return jsonify(ok=False, error="no image field in the request"), 400
+    cut = request.form.get("cut", "each")
+    if cut not in ("each", "end", "none"):
+        return jsonify(ok=False, error="cut must be each, end or none"), 400
+    try:
+        pages = [load_raster(f) for f in files]
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except Exception as e:  # noqa: BLE001 — unreadable upload
+        return jsonify(ok=False, error=f"could not read image: {e}"), 400
+    height = sum(pg.height for pg in pages)
+    app.logger.warning("raster job source=%s job=%s pages=%d height=%dpx",
+                       request.form.get("source", "?"), request.form.get("job", "?"),
+                       len(pages), height)
+    try:
+        print_job(pages, cut)
+        return jsonify(ok=True, pages=len(pages), length_mm=round(height / DOTS_PER_MM))
     except Exception as e:  # noqa: BLE001
         return jsonify(ok=False, error=str(e)), 500
 
